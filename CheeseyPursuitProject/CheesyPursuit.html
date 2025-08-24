@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cheesy Pursuit</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background-color: #1a202c;
+            color: #e2e8f0;
+            overflow: hidden;
+        }
+        .game-container {
+            border: 4px solid #4a5568;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        .game-overlay {
+            background-color: rgba(26, 32, 44, 0.9);
+        }
+        .btn {
+            border: 2px solid #a0aec0;
+            transition: all 0.2s ease-in-out;
+        }
+        .btn:hover {
+            background-color: #a0aec0;
+            color: #1a202c;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        canvas {
+            background-color: #2d3748;
+            image-rendering: pixelated; /* For a retro feel */
+            display: block; /* Prevents extra space below canvas */
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+    <audio id="myAudio">
+        <source src="sounds/win.wav" type="audio/wav">
+        Your browser does not support the audio element.
+    </audio>
+
+    <h1 class="text-4xl mb-2 text-yellow-400">Cheesy Pursuit</h1>
+    <p class="mb-4 text-sm text-gray-400">Eat all the cheese, avoid the cats!</p>
+
+    <!-- Level Display Bar -->
+    <div class="w-full max-w-2xl flex justify-center items-center bg-black bg-opacity-25 p-2 rounded-t-lg">
+        <span class="text-lg text-yellow-300">Level: <span id="level-display">1</span></span>
+    </div>
+
+    <!-- Redesigned Game UI -->
+    <div class="w-full max-w-2xl flex justify-around items-center bg-gray-900 p-3 border-t-2 border-b-4 border-gray-700 text-sm">
+        <div class="flex items-center" title="Score">
+            <svg class="w-6 h-6 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" stroke="#f6e05e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span id="score" class="text-white font-bold">0</span>
+        </div>
+        <div class="flex items-center" title="Cheeses Left">
+            <img id="cheese-icon-ui" class="w-6 h-6 mr-2" alt="Cheese Icon"/>
+            <span id="cheeses-left-count" class="text-white font-bold">0</span>
+        </div>
+        <div class="flex items-center" title="Stink Cheeses">
+            <img id="stink-cheese-icon-ui" class="w-6 h-6 mr-2" alt="Stink Cheese Icon"/>
+            <span id="stink-cheese-count" class="text-green-400 font-bold">0</span>
+        </div>
+        <div class="flex items-center" title="Lives">
+            <img id="mouse-icon-ui" class="w-6 h-6 mr-2" alt="Mouse Icon"/>
+            <span id="lives" class="text-red-500 font-bold">3</span>
+        </div>
+    </div>
+
+
+    <!-- Game Canvas and Overlays -->
+    <div id="game-container" class="relative w-full max-w-2xl game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- Start Screen Overlay -->
+        <div id="start-screen" class="absolute inset-0 flex flex-col items-center justify-center game-overlay">
+            <h2 id="start-title" class="text-3xl mb-6 text-yellow-300">Select Grid Size</h2>
+            <div id="start-buttons" class="flex items-start space-x-4 text-center">
+                <div>
+                    <button id="start-small" class="btn text-lg px-6 py-3 rounded-lg">Small</button>
+                    <p class="text-xs mt-2 text-gray-400">5 x 3</p>
+                </div>
+                <div>
+                    <button id="start-medium" class="btn text-lg px-6 py-3 rounded-lg">Medium</button>
+                    <p class="text-xs mt-2 text-gray-400">7 x 5</p>
+                </div>
+                <div>
+                    <button id="start-large" class="btn text-lg px-6 py-3 rounded-lg">Large</button>
+                    <p class="text-xs mt-2 text-gray-400">9 x 7</p>
+                </div>
+            </div>
+             <div class="mt-8 text-center text-gray-400">
+                <p class="mb-2 text-sm">Use <kbd class="px-2 py-1 border rounded border-gray-500">ARROW KEYS</kbd> to move.</p>
+            </div>
+        </div>
+
+        <!-- Message Overlay (Game Over / Level Complete / Paused) -->
+        <div id="message-screen" class="hidden absolute inset-0 flex flex-col items-center justify-center game-overlay">
+            <h2 id="message-title" class="text-4xl mb-4"></h2>
+            <p id="message-text" class="text-xl mb-6"></p>
+            <div class="flex space-x-4">
+                <button id="next-action-button" class="btn text-2xl px-8 py-4 rounded-lg"></button>
+                <button id="home-button" class="hidden btn text-2xl px-8 py-4 rounded-lg">Home</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Shortcuts Bar -->
+    <div class="w-full max-w-2xl flex justify-center items-center bg-gray-900 p-2 rounded-b-lg border-t-2 border-gray-700 text-xs text-gray-400 space-x-6">
+        <span><kbd class="px-2 py-1 border rounded border-gray-500">ESC</kbd> = Pause</span>
+        <span><kbd class="px-2 py-1 border rounded border-gray-500">SPACE</kbd> = Use Stink Cheese</span>
+    </div>
+
+<script>
+    // --- DOM Elements ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const stinkCheeseCountEl = document.getElementById('stink-cheese-count');
+    const cheesesLeftCountEl = document.getElementById('cheeses-left-count');
+    const levelDisplayEl = document.getElementById('level-display');
+    const startScreen = document.getElementById('start-screen');
+    const startTitle = document.getElementById('start-title');
+    const startButtons = document.getElementById('start-buttons');
+    const messageScreen = document.getElementById('message-screen');
+    const messageTitle = document.getElementById('message-title');
+    const messageText = document.getElementById('message-text');
+    const nextActionButton = document.getElementById('next-action-button');
+    const homeButton = document.getElementById('home-button');
+    const gameContainer = document.getElementById('game-container');
+
+    // --- Game Configuration ---
+    const TILE_TYPE = { EMPTY: 0, CHEESE: 1, STINK_CHEESE: 2, BIG_CHEESE: 3 };
+    const GRID_SIZES = { 
+        small: { w: 5, h: 3, maxCats: 3, maxBigCheeses: 2 }, 
+        medium: { w: 7, h: 5, maxCats: 5, maxBigCheeses: 3 }, 
+        large: { w: 9, h: 7, maxCats: 7, maxBigCheeses: 4 } 
+    };
+    const LIVES_PER_GAME = 3;
+
+    // --- Image Assets ---
+    const mouseImage = new Image();
+    const catImage = new Image();
+    const cheeseImage = new Image();
+    const stinkCheeseImage = new Image();
+    const bigCheeseImage = new Image();
+
+    const svgMouse = `<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 61 63"><defs><style>.cls-1{fill:#010201;}.cls-2{fill:#fff;}.cls-3{fill:#8a3d92;}</style></defs><g><path class="cls-2" d="M26,20h10v-8h-10v8ZM31,14h3v5h-3v-5ZM28,14h2v5h-2v-5Z"/><path class="cls-2" d="M17,33h4v2h7v-2h-2v-6h-3v-3h7v3h-2v5h2v3h2v-3h4v-2h4v-2h2v-2h2v-2h2v-2h2v2h6v-2h2v-12h-2v-4h-2v-2h-2v-2h-12v2h-4v2h-2v2h-2v-2h-2v-2h-2v-2h-11v2h-2v3h-2v4h-2v9h4v-2h2v-2h2v-2h5v3h-5v2h-2v2h-2v6h2v4h2v2ZM44,4h4v2h2v2h2v4h2v4h-4v-8h-2v-2h-4v-2ZM36,10v2h2v9h-2v2h-9v-1h-1v-1h-1v-1h-2v-8h2v-1h1v-1h10ZM21,8v-2h-4v-2h7v2h2v2h-5Z"/><polygon class="cls-2" points="7 43 7 39 9 39 9 35 3 35 3 43 7 43"/></g><polygon class="cls-2" points="42 35 42 33 46 33 46 31 44 31 44 29 42 29 42 31 40 31 40 33 36 33 36 35 38 35 38 49 36 49 36 51 32 51 32 53 21 53 21 51 17 51 17 49 15 49 15 39 17 39 17 33 15 33 15 31 13 31 13 35 11 35 11 39 9 39 9 51 11 51 11 53 13 53 13 55 15 55 15 57 11 57 11 61 23 61 23 59 26 59 26 57 28 57 28 59 30 59 30 57 32 57 32 59 34 59 34 61 44 61 44 55 42 55 42 53 48 53 48 45 42 45 42 43 52 43 52 35 42 35"/><g><rect class="cls-1" x="13" y="2" width="2" height="2"/><rect class="cls-1" x="26" y="2" width="2" height="2"/><rect class="cls-1" x="28" y="4" width="2" height="2"/><polygon class="cls-1" points="32 8 32 6 34 6 34 4 38 4 38 2 33 2 33 4 31 4 31 6 30 6 30 8 32 8"/><rect class="cls-1" x="50" y="2" width="2" height="2"/><rect class="cls-1" x="52" y="4" width="2" height="2"/><polygon class="cls-1" points="30 32 28 32 28 27 30 27 30 24 28 24 26 24 23 24 23 27 26 27 26 33 28 33 28 35 21 35 21 37 32 37 32 35 30 35 30 32"/><polygon class="cls-1" points="26 11 25 11 25 12 23 12 23 20 25 20 25 21 26 21 26 22 27 22 27 23 36 23 36 22 36 21 38 21 38 12 36 12 36 20 26 20 26 12 36 12 36 11 36 10 26 10 26 11"/><polygon class="cls-1" points="21 8 26 8 26 6 24 6 24 4 17 4 17 6 21 6 21 8"/><rect class="cls-1" x="44" y="4" width="4" height="2"/><rect class="cls-1" x="48" y="6" width="2" height="2"/><polygon class="cls-1" points="52 16 54 16 54 12 52 12 52 8 50 8 50 16 52 16"/><rect class="cls-1" x="17" y="33" width="4" height="2"/><rect class="cls-1" x="15" y="31" width="2" height="2"/><rect class="cls-1" x="9" y="51" width="2" height="2"/><polygon class="cls-1" points="15 57 15 55 13 55 13 53 11 53 11 57 13 57 15 57"/><polygon class="cls-1" points="56 53 54 53 54 57 56 57 56 55 58 55 58 33 56 33 56 53"/><rect class="cls-1" x="52" y="35" width="2" height="8"/><polygon class="cls-1" points="48 55 48 53 46 53 44 53 42 53 42 55 44 55 44 57 44 61 34 61 34 59 32 59 32 57 30 57 30 59 28 59 28 57 26 57 26 59 23 59 23 61 11 61 11 57 9 57 9 62 11 62 11 63 24 63 24 61 33 61 33 63 44 63 44 62 46 62 46 57 50 57 50 55 48 55"/><polygon class="cls-1" points="48 43 42 43 42 45 48 45 48 53 50 53 50 45 52 45 52 43 50 43 48 43"/><rect class="cls-1" x="50" y="57" width="4" height="2"/><polygon class="cls-1" points="9 39 11 39 11 35 13 35 13 31 15 31 15 27 13 27 13 21 15 21 15 19 17 19 17 17 22 17 22 14 17 14 17 16 15 16 15 18 13 18 13 20 11 20 9 20 9 11 11 11 11 7 13 7 13 4 11 4 11 6 9 6 9 10 7 10 7 21 9 21 9 23 11 23 11 29 13 29 13 30 11 30 11 32 9 32 3 32 3 35 9 35 9 39"/><polygon class="cls-1" points="7 39 7 43 3 43 3 35 0 35 0 43 2 43 2 45 7 45 7 51 9 51 9 39 7 39"/><rect class="cls-1" x="28" y="14" width="2" height="5"/><rect class="cls-1" x="31" y="14" width="3" height="5"/><rect class="cls-1" x="58" y="30" width="3" height="3"/><rect class="cls-1" x="54" y="6" width="2" height="4"/><polygon class="cls-1" points="54 22 54 24 48 24 48 22 46 22 46 24 44 24 44 26 42 26 42 28 40 28 40 30 36 30 36 32 32 32 32 35 36 35 36 33 40 33 40 31 42 31 42 29 44 29 44 31 46 31 46 33 42 33 42 35 52 35 52 33 48 33 48 30 46 30 46 28 44 28 44 27 46 27 46 25 48 25 48 27 54 27 54 25 56 25 56 23 58 23 58 10 56 10 56 22 54 22"/><rect class="cls-1" x="38" width="12" height="2"/><rect class="cls-1" x="15" width="11" height="2"/></g><polygon class="cls-3" points="36 49 38 49 38 39 38 37 38 35 36 35 32 35 32 37 21 37 21 35 17 35 17 37 17 39 15 39 15 49 17 49 17 51 21 51 21 53 32 53 32 51 36 51 36 49"/></svg>`;
+    const svgCat = `<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 58"><defs><style>.cls-1{fill:#f7f5f1;}.cls-2{fill:#82843d;}.cls-3{fill:#a47977;}.cls-4{fill:#020302;}.cls-5{fill:#d0d051;}.cls-6{fill:#902627;}.cls-7{fill:#38371e;}</style></defs><polygon class="cls-2" points="2 2 2 15 4 15 4 22 4 26 2 26 2 36 4 36 4 42 6 42 6 45 8 45 8 49 10 49 10 50 12 50 12 51 14 51 14 53 18 53 18 55 22 55 22 56 38 56 38 55 42 55 42 53 46 53 46 51 48 51 48 50 50 50 50 49 52 49 52 45 54 45 54 42 56 42 56 36 58 36 58 26 56 26 56 22 56 15 58 15 58 2 52 2 52 5 48 5 48 6 12 6 12 5 8 5 8 3 5 3 5 2 2 2"/><polygon class="cls-1" points="22 27 23 27 23 26 28 26 28 14 26 14 26 13 20 13 20 15 18 15 18 19 17 19 17 26 22 26 22 27"/><polygon class="cls-1" points="37 27 35 27 35 26 30 26 30 14 31 13 32 13 38 13 39 14 40 15 41 17 41 19 41 26 37 26 37 27"/><polygon class="cls-6" points="33 47 32 47 30 47 28 47 27 47 27 49 28 49 28 51 30 51 32 51 32 49 33 49 33 47"/><polygon class="cls-5" points="19 35 19 34 18 34 18 33 14 33 14 32 7 32 7 30 4 30 4 33 6 33 6 34 13 34 13 35 14 35 14 36 18 36 18 37 22 37 22 35 19 35"/><polygon class="cls-5" points="18 42 18 43 13 43 13 45 10 45 10 46 8 46 8 48 11 48 11 47 14 47 14 45 18 45 18 44 22 44 22 42 18 42"/><rect class="cls-5" x="4" y="38" width="16" height="2"/><polygon class="cls-5" points="41 35 41 34 42 34 42 33 46 33 46 32 53 32 53 30 56 30 56 33 54 33 54 34 47 34 47 35 46 35 46 36 42 36 42 37 38 37 38 35 41 35"/><polygon class="cls-5" points="42 42 42 43 47 43 47 45 50 45 50 46 52 46 52 48 49 48 49 47 46 47 46 45 42 45 42 44 38 44 38 42 42 42"/><rect class="cls-5" x="40" y="38" width="16" height="2" transform="translate(96 78) rotate(-180)"/><g><path class="cls-7" d="M58,18v-2h2V0h-5v1h-4v2h-3v1h-4v2h-6v-1h-16v1h-6v-2h-4v-1h-3V1h-4V0H0v16h2v2h2v2h-2v5H0v12h2v6h2v4h2v3h2v1h2v1h2v1h1v2h4v2h5v1h16v-1h5v-2h4v-2h1v-1h2v-1h2v-1h2v-3h2v-4h2v-6h2v-12h-2v-5h-2v-2h2ZM55,17v-1h-1v-1h-1v-1h-1v-1h1v-2h2v-5h-2v4h-2v3h-1v1h1v1h1v1h1v1h1v5h2v4h2v10h-2v6h-2v3h-2v4h-2v1h-2v1h-2v2h-4v2h-4v1h-16v-1h-4v-2h-4v-2h-2v-1h-2v-1h-2v-4h-2v-3h-2v-6h-2v-10h2v-4h2v-5h1v-1h1v-1h1v-1h1v-1h-1v-3h-2v-4h-2v5h2v2h1v1h-1v1h-1v1h-1v1h-1v-2h-2V2h3v1h3v2h4v1h3v2h-1v1h-1v1h-1v1h-1v1h-1v1h2v-1h1v-1h1v-1h1v-1h1v-1h6v-1h16v1h6v1h1v1h1v1h1v1h1v1h2v-1h-1v-1h-1v-1h-1v-1h-1v-1h-1v-2h3v-1h4v-2h3v-1h3v13h-2v2h-1Z"/><polygon class="cls-7" points="35 47 34 47 34 46 32 46 32 45 31 45 31 40 30 40 30 34 28 34 28 41 29 41 29 45 28 45 28 46 26 46 26 47 25 47 25 48 24 48 24 50 26 50 26 49 27 49 27 48 28 48 28 47 30 47 32 47 32 48 33 48 33 49 34 49 34 50 36 50 36 48 35 48 35 47"/></g><rect class="cls-4" x="23" y="26" width="12" height="1"/><rect class="cls-4" x="28" y="14" width="2" height="12"/><rect class="cls-4" x="29" y="12" width="2" height="2"/><rect class="cls-4" x="26" y="12" width="2" height="2"/><rect class="cls-4" x="23" y="10" width="2" height="2"/><rect class="cls-4" x="22" y="9" width="2" height="1"/><rect class="cls-4" x="21" y="8" width="2" height="1"/><rect class="cls-4" x="32" y="10" width="2" height="2" transform="translate(66 22) rotate(-180)"/><rect class="cls-4" x="33" y="9" width="2" height="1" transform="translate(68 19) rotate(-180)"/><rect class="cls-4" x="34" y="8" width="2" height="1" transform="translate(70 17) rotate(-180)"/><rect class="cls-4" x="31" y="11" width="6" height="2"/><rect class="cls-4" x="37" y="12" width="2" height="2"/><rect class="cls-4" x="39" y="13" width="2" height="4"/><rect class="cls-4" x="41" y="16" width="2" height="10"/><rect class="cls-4" x="15" y="18" width="2" height="8"/><rect class="cls-4" x="16" y="14" width="2" height="5"/><rect class="cls-4" x="18" y="12" width="2" height="3"/><rect class="cls-4" x="20" y="11" width="7" height="2"/><rect class="cls-4" x="31" y="17" width="5" height="5"/><rect class="cls-4" x="21" y="17" width="5" height="5"/><rect class="cls-4" x="21" y="28" width="2" height="3"/><rect class="cls-4" x="23" y="30" width="2" height="3"/><rect class="cls-4" x="25" y="31" width="1" height="3"/><rect class="cls-4" x="26" y="32" width="1" height="3"/><rect class="cls-4" x="27" y="33" width="1" height="2"/><rect class="cls-4" x="32" y="33" width="1" height="2"/><rect class="cls-4" x="33" y="32" width="2" height="2"/><rect class="cls-4" x="34" y="31" width="2" height="2"/><rect class="cls-4" x="36" y="28" width="2" height="4"/><rect class="cls-4" x="35" y="27" width="2" height="1"/><rect class="cls-4" x="37" y="26" width="4" height="1"/><rect class="cls-4" x="16" y="26" width="6" height="1"/><rect class="cls-4" x="22" y="27" width="2" height="1"/><rect class="cls-4" x="28" y="34" width="4" height="1"/><polygon class="cls-3" points="35 27 35 28 36 28 36 31 34 31 34 32 33 32 33 33 32 33 32 34 28 34 28 33 27 33 27 32 26 32 26 31 25 31 25 30 23 30 23 28 24 28 24 27 35 27"/></svg>`;
+    const svgCheese = `<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 39 36"><defs><style>.cls-1 {fill: #f1ea42;} .cls-2 {fill: #8c893d;}</style></defs><polygon class="cls-1" points="2 15 2 33 17 33 17 31 25 31 25 29 34 29 34 28 37 28 37 6 31 6 31 4 28 4 28 2 25 2 25 4 21 4 21 5 18 5 18 7 15 7 15 9 12 9 12 10 9 10 9 12 4 12 4 15 2 15"/><rect class="cls-2" y="14" width="2" height="22"/><rect class="cls-2" x="37" y="8" width="2" height="22"/><rect class="cls-2" x="36" y="6" width="2" height="3"/><rect class="cls-2" x="32.5" y="2.5" width="2" height="5" transform="translate(38.5 -28.5) rotate(90)"/><rect class="cls-2" x="28.5" y="1.5" width="2" height="3" transform="translate(32.5 -26.5) rotate(90)"/><rect class="cls-2" x="25" y="-1" width="2" height="4" transform="translate(27 -25) rotate(90)"/><rect class="cls-2" x="22" y="1" width="2" height="4" transform="translate(26 -20) rotate(90)"/><rect class="cls-2" x="18" y="2" width="2" height="4" transform="translate(23 -15) rotate(90)"/><rect class="cls-2" x="20.5" y="5.5" width="1" height="4" transform="translate(28.5 -13.5) rotate(90)"/><rect class="cls-2" x="24.5" y="7.5" width="1" height="4" transform="translate(34.5 -15.5) rotate(90)"/><rect class="cls-2" x="21" y="5" width="1" height="3" transform="translate(28 -15) rotate(90)"/><rect class="cls-2" x="25" y="7" width="1" height="3" transform="translate(34 -17) rotate(90)"/><rect class="cls-2" x="25.5" y="6.5" width="1" height="2" transform="translate(33.5 -18.5) rotate(90)"/><rect class="cls-2" x="15" y="4" width="2" height="4" transform="translate(22 -10) rotate(90)"/><rect class="cls-2" x="12.5" y="6.5" width="2" height="3" transform="translate(21.5 -5.5) rotate(90)"/><rect class="cls-2" x="9" y="7" width="2" height="4" transform="translate(19 -1) rotate(90)"/><rect class="cls-2" x="5.5" y="8.5" width="2" height="5" transform="translate(17.5 4.5) rotate(90)"/><rect class="cls-2" x="34" y="7" width="2" height="2"/><rect class="cls-2" x="28" y="9" width="6" height="2"/><rect class="cls-2" x="15" y="10" width="13" height="2"/><rect class="cls-2" x="1" y="12" width="14" height="2"/><rect class="cls-2" x="1" y="13" width="4" height="2"/><rect class="cls-2" x="1" y="33" width="4" height="2"/><rect class="cls-2" x="17" y="31" width="8" height="2"/><rect class="cls-2" x="25" y="29" width="9" height="2"/><rect class="cls-2" x="34" y="28" width="4" height="2"/><rect class="cls-2" x="5" y="33" width="12" height="1"/><rect class="cls-2" x="1" y="31" width="2" height="2"/><polygon class="cls-2" points="10 18 9 18 9 17 8 17 8 16 7 16 7 15 6 15 6 16 5 16 5 17 4 17 4 18 3 18 3 19 4 19 4 20 5 20 5 21 6 21 6 22 7 22 7 21 8 21 8 20 9 20 9 19 10 19 10 18"/><polygon class="cls-2" points="22 23 21 23 21 22 20 22 20 21 19 21 19 20 18 20 18 21 17 21 17 22 16 22 16 23 15 23 15 24 16 24 16 25 17 25 17 26 18 26 18 27 19 27 19 26 20 26 20 25 21 25 21 24 22 24 22 23"/><polygon class="cls-2" points="13 28.29 12.57 28.29 12.57 27.86 12.14 27.86 12.14 27.43 11.71 27.43 11.71 27 11.29 27 11.29 27.43 10.86 27.43 10.86 27.86 10.43 27.86 10.43 28.29 10 28.29 10 28.71 10.43 28.71 10.43 29.14 10.86 29.14 10.86 29.57 11.29 29.57 11.29 30 11.71 30 11.71 29.57 12.14 29.57 12.14 29.14 12.57 29.14 12.57 28.71 13 28.71 13 28.29"/><polygon class="cls-2" points="34.5 16.86 33.21 16.86 33.21 15.57 31.93 15.57 31.93 14.29 30.64 14.29 30.64 13 29.36 13 29.36 14.29 28.07 14.29 28.07 15.57 26.79 15.57 26.79 16.86 25.5 16.86 25.5 18.14 26.79 18.14 26.79 19.43 28.07 19.43 28.07 20.71 29.36 20.71 29.36 22 30.64 22 30.64 20.71 31.93 20.71 31.93 19.43 33.21 19.43 33.21 18.14 34.5 18.14 34.5 16.86"/></svg>`;
+    const svgStinkCheese = `<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 53"><defs><style>.cls-1{fill:#6f9593;}.cls-2{fill:#f2efdd;}.cls-3{fill:#8d8a3d;}.cls-4{fill:#8d976e;}.cls-5{fill:#7a9e69;}.cls-6{fill:#597b57;}.cls-7{fill:#416166;}.cls-8{fill:#5b7650;}</style></defs><polygon class="cls-2" points="33 40 32 40 32 42 30 42 30 45 29 45 29 46 27 46 27 47 25 47 25 48 22 48 22 47 21 47 21 48 20 48 20 49 17 49 17 48 16 48 16 47 15 47 15 49 14 49 13 49 13 47 10 47 10 49 9 49 9 48 8 48 8 46 7 46 7 48 5 48 5 50 4 50 4 48 3 48 3 46 2 46 2 28 2 26 3 26 3 23 4 23 5 23 5 22 6 22 6 21 7 21 7 20 8 20 8 19 33 19 33 40"/><g><polygon class="cls-3" points="33 40 32 40 32 42 30 42 30 45 29 45 29 46 27 46 27 47 25 47 25 48 22 48 22 47 21 47 21 48 20 48 20 49 17 49 17 48 16 48 16 47 15 47 15 49 14 49 13 49 13 47 10 47 10 49 9 49 9 48 8 48 8 46 7 46 7 48 5 48 5 50 4 50 4 48 3 48 3 46 2 46 2 28 2 26 3 26 3 23 4 23 5 23 5 22 6 22 6 21 7 21 7 20 8 20 8 19 33 19 33 17 8 17 8 18 7 18 7 19 6 19 6 20 5 20 5 21 4 21 3 21 3 22 2 22 2 24 1 24 1 26 0 26 0 47 2 47 2 51 3 51 3 53 4 53 6 53 6 51 7 51 7 49 8 49 8 51 9 51 9 52 10 52 10 50 12 50 12 52 14 52 14 53 17 53 17 52 17 50 18 50 18 53 20 53 20 50 21 50 21 49 24 49 24 50 25 50 25 49 26 49 26 48 28 48 28 47 30 47 30 46 31 46 31 45 32 45 32 43 34 43 34 41 34 40 34 19 33 19 33 40"/><polygon class="cls-3" points="3 18 4 18 4 16 5 16 5 14 7 14 7 11 5 11 5 9 4 9 4 8 3 8 3 6 4 6 4 4 5 4 5 2 4 2 4 3 3 3 3 4 2 4 2 9 3 9 3 11 4 11 4 12 5 12 5 13 4 13 4 14 3 14 3 16 2 16 2 20 3 20 3 18"/><polygon class="cls-3" points="13 12 14 12 14 11 15 11 15 9 14 9 13 9 13 10 12 10 12 14 13 14 13 12"/><rect class="cls-3" x="23" y="12" width="2" height="4"/><polygon class="cls-3" points="33 7 33 4 32 4 32 0 30 0 30 6 31 6 31 8 33 8 33 10 31 10 31 11 29 11 29 15 31 15 31 12 33 12 33 11 35 11 35 7 33 7"/><rect class="cls-3" x="21" y="9" width="2" height="3"/><rect class="cls-3" x="23" y="6" width="2" height="3"/><rect class="cls-3" x="25" y="3" width="2" height="3"/><rect class="cls-3" x="23" y="1" width="2" height="2"/><rect class="cls-3" x="15" y="6" width="2" height="3"/><polygon class="cls-3" points="14 4 14 1 12 1 12 4 13 4 13 6 15 6 15 4 14 4"/></g><rect class="cls-5" x="3" y="40" width="3" height="2"/><rect class="cls-5" x="8" y="41" width="3" height="2"/><rect class="cls-5" x="13" y="34" width="3" height="2"/><rect class="cls-6" x="17" y="42" width="3" height="3"/><rect class="cls-7" x="14" y="39" width="3" height="3"/><rect class="cls-5" x="9" y="40" width="2" height="1"/><rect class="cls-5" x="18" y="38" width="3" height="2"/><rect class="cls-5" x="19" y="37" width="2" height="1"/><rect class="cls-5" x="20" y="35" width="3" height="2"/><rect class="cls-8" x="26" y="35" width="1" height="2"/><rect class="cls-8" x="7" y="33" width="3" height="2"/><rect class="cls-8" x="5" y="30" width="2" height="3"/><rect class="cls-8" x="7" y="29" width="3" height="2"/><rect class="cls-8" x="9" y="22" width="1" height="4"/><rect class="cls-8" x="10" y="21" width="1" height="3"/><rect class="cls-8" x="11" y="20" width="2" height="2"/><rect class="cls-5" x="12" y="24" width="1" height="2"/><rect class="cls-5" x="18" y="20" width="2" height="2"/><rect class="cls-5" x="18" y="24" width="1" height="1"/><rect class="cls-5" x="23" y="21" width="1" height="1"/><rect class="cls-4" x="5" y="23" width="1" height="2"/><rect class="cls-1" x="3" y="27" width="4" height="2"/><rect class="cls-7" x="3" y="36" width="4" height="3"/><rect class="cls-8" x="17" y="30" width="1" height="2"/><rect class="cls-8" x="18" y="29" width="1" height="2"/><polygon class="cls-5" points="29 27 29 26 27 26 27 23 25 23 25 27 27 27 27 28 29 28 29 29 31 29 31 27 29 27"/><rect class="cls-8" x="27" y="29" width="4" height="1"/><rect class="cls-5" x="29" y="38" width="2" height="2"/><polygon class="cls-5" points="32 33 31 33 31 32 29 32 29 34 30 34 30 35 31 35 32 35 33 35 33 33 32 33"/><rect class="cls-4" x="26" y="38" width="2" height="2"/><rect class="cls-7" x="26" y="42" width="2" height="2"/><rect class="cls-7" x="26" y="32" width="2" height="2"/><rect class="cls-7" x="27" y="21" width="2" height="2"/><rect class="cls-1" x="22" y="27" width="2" height="2"/><rect class="cls-1" x="19" y="27" width="1" height="2"/><rect class="cls-1" x="22" y="23" width="1" height="2"/><rect class="cls-1" x="13" y="27" width="3" height="2"/><rect class="cls-1" x="23" y="28" width="2" height="3"/><rect class="cls-8" x="29" y="23" width="2" height="2"/></svg>`;
+    const svgBigCheese = `<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 54 40"><defs><style>.cls-1{fill:#8d8a3d;}.cls-2{fill:#f1ea42;}</style></defs><path class="cls-2" d="M50,15v-3h-2v2h-2v-2h2v-2h-2v-2h-2v-2h-3v-2h-5v-2h-18v2h-4v2h-4v2h-2v2h-2v2h-2v3h-2v13h2v4h2v2h2v1h2v1h2v-16h2v-3h1v-2h2v-2h2v-1h2v-2h6v2h-2v4h-1v2h-2v20h18v-2h4v-2h4v-2h2v-3h2v-14h-2ZM11,19h-2v-2h-2v-2h-2v-2h2v2h2v2h2v2ZM29,20h-2v-2h2v2ZM32,20h-2v-2h2v2ZM39,18h-2v-2h2v2ZM44,16h-2v-2h2v2Z"/><g><rect class="cls-1" y="15" width="2" height="13"/><rect class="cls-1" x="2" y="28" width="2" height="4"/><polygon class="cls-1" points="22 18 24 18 24 16 25 16 25 12 27 12 27 10 21 10 21 12 19 12 19 13 17 13 17 15 15 15 15 17 14 17 14 20 12 20 12 36 10 36 10 35 8 35 8 34 6 34 6 36 8 36 8 37 10 37 10 38 17 38 17 36 19 36 19 34 20 34 20 38 20 40 40 40 40 38 22 38 22 18"/><rect class="cls-1" x="4" y="32" width="2" height="2"/><rect class="cls-1" x="9" y="17" width="2" height="2"/><rect class="cls-1" x="27" y="18" width="2" height="2"/><rect class="cls-1" x="30" y="18" width="2" height="2"/><rect class="cls-1" x="37" y="16" width="2" height="2"/><rect class="cls-1" x="42" y="14" width="2" height="2"/><rect class="cls-1" x="46" y="12" width="2" height="2"/><rect class="cls-1" x="7" y="15" width="2" height="2"/><rect class="cls-1" x="5" y="13" width="2" height="2"/><rect class="cls-1" x="2" y="12" width="2" height="3"/><rect class="cls-1" x="4" y="10" width="2" height="2"/><rect class="cls-1" x="6" y="8" width="2" height="2"/><rect class="cls-1" x="8" y="6" width="2" height="2"/><rect class="cls-1" x="10" y="4" width="4" height="2"/><rect class="cls-1" x="14" y="2" width="4" height="2"/><rect class="cls-1" x="36" y="2" width="5" height="2"/><rect class="cls-1" x="41" y="4" width="3" height="2"/><rect class="cls-1" x="44" y="6" width="2" height="2"/><rect class="cls-1" x="46" y="8" width="2" height="2"/><rect class="cls-1" x="48" y="10" width="2" height="2"/><rect class="cls-1" x="50" y="12" width="2" height="3"/><rect class="cls-1" x="50" y="29" width="2" height="3"/><rect class="cls-1" x="48" y="32" width="2" height="2"/><rect class="cls-1" x="44" y="34" width="4" height="2"/><rect class="cls-1" x="40" y="36" width="4" height="2"/><rect class="cls-1" x="52" y="15" width="2" height="14"/><rect class="cls-1" x="18" width="18" height="2"/></g></svg>`;
+    
+    mouseImage.src = 'data:image/svg+xml;base64,' + btoa(svgMouse);
+    catImage.src = 'data:image/svg+xml;base64,' + btoa(svgCat);
+    cheeseImage.src = 'data:image/svg+xml;base64,' + btoa(svgCheese);
+    stinkCheeseImage.src = 'data:image/svg+xml;base64,' + btoa(svgStinkCheese);
+    bigCheeseImage.src = 'data:image/svg+xml;base64,' + btoa(svgBigCheese);
+
+    // --- Game State ---
+    let gridWidth, gridHeight, currentGridSize;
+    let tileSize;
+    let grid;
+    let player;
+    let cats;
+    let score;
+    let highScore = localStorage.getItem('cheesyPursuitHighScore') || 0;
+    let lives;
+    let level;
+    let cheeseCount;
+    let stinkCheeseCount = 0;
+    let gameLoopId;
+    let isGameOver = true;
+    let isPaused = false;
+    let audioReady = false;
+    let hasMoved = false;
+
+    // --- Audio ---
+    const sounds = {
+        move: new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.1 } }).toDestination(),
+        squeal: new Tone.Synth({ oscillator: { type: 'sawtooth' }, envelope: { attack: 0.01, decay: 0.1, sustain: 0.2, release: 0.2 } }).toDestination(),
+        yahoo: new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.1, sustain: 0.2, release: 0.2 } }).toDestination(),
+        levelUp: new Tone.PluckSynth().toDestination(),
+        gameOver: new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.5, sustain: 0, release: 0.1 } }).toDestination(),
+        stink: new Tone.Synth({ oscillator: { type: 'square' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.2 } }).toDestination(),
+    };
+
+    function playSound(sound) {
+        var x = document.getElementById("myAudio");
+        x.pause();
+        x.src = `sounds/${sound}.WAV`;
+        x.play();
+    }
+
+    // --- Drawing Functions ---
+    function drawMouse(x, y) {
+        const padding = tileSize * 0.05;
+        const size = tileSize - (padding * 2);
+        const px = x * tileSize + padding;
+        const py = y * tileSize + padding;
+        ctx.drawImage(mouseImage, px, py, size, size);
+    }
+
+    function drawCat(px, py) {
+        const padding = tileSize * 0.05;
+        const size = tileSize - (padding * 2);
+        ctx.drawImage(catImage, px + padding, py + padding, size, size);
+    }
+
+    function drawCheese(x, y) {
+        const padding = tileSize * 0.125; 
+        const size = tileSize - (padding * 2);
+        const px = x * tileSize + padding;
+        const py = y * tileSize + padding;
+        ctx.drawImage(cheeseImage, px, py, size, size);
+    }
+    
+    function drawStinkCheese(x, y) {
+        const padding = tileSize * 0.125;
+        const size = tileSize - (padding * 2);
+        const px = x * tileSize + padding;
+        const py = y * tileSize + padding;
+        ctx.drawImage(stinkCheeseImage, px, py, size, size);
+    }
+    
+    function drawBigCheese(x, y) {
+        const padding = tileSize * 0.1;
+        const size = tileSize - (padding * 2);
+        const px = x * tileSize + padding;
+        const py = y * tileSize + padding;
+        ctx.drawImage(bigCheeseImage, px, py, size, size);
+    }
+
+    function drawGrid() {
+        const lightColor = '#D1D5DB'; 
+        const darkColor = '#6B7280';  
+        const bevelSize = tileSize * 0.05;
+
+        for (let y = 0; y < gridHeight; y++) {
+            for (let x = 0; x < gridWidth; x++) {
+                const px = x * tileSize;
+                const py = y * tileSize;
+
+                ctx.fillStyle = '#9CA3AF'; 
+                ctx.fillRect(px, py, tileSize, tileSize);
+
+                ctx.fillStyle = lightColor;
+                ctx.beginPath();
+                ctx.moveTo(px, py);
+                ctx.lineTo(px + tileSize, py);
+                ctx.lineTo(px + tileSize - bevelSize, py + bevelSize);
+                ctx.lineTo(px + bevelSize, py + bevelSize);
+                ctx.lineTo(px + bevelSize, py + tileSize - bevelSize);
+                ctx.lineTo(px, py + tileSize);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = darkColor;
+                ctx.beginPath();
+                ctx.moveTo(px + tileSize, py + tileSize);
+                ctx.lineTo(px, py + tileSize);
+                ctx.lineTo(px + bevelSize, py + tileSize - bevelSize);
+                ctx.lineTo(px + tileSize - bevelSize, py + tileSize - bevelSize);
+                ctx.lineTo(px + tileSize - bevelSize, py + bevelSize);
+                ctx.lineTo(px + tileSize, py);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+    }
+
+    // --- Character Classes ---
+    class Character {
+        constructor(x, y) { this.x = x; this.y = y; }
+    }
+
+    class Player extends Character {
+        constructor(x, y) { super(x, y); }
+        draw() { drawMouse(this.x, this.y); }
+        
+        move(dx, dy) {
+            hasMoved = true;
+            if (isGameOver) return;
+            const newX = this.x + dx;
+            const newY = this.y + dy;
+            if (newX < 0 || newX >= gridWidth || newY < 0 || newY >= gridHeight) {
+                return;
+            }
+            this.x = newX; this.y = newY;
+            
+            playSound("mouse_mov");
+            
+            const tileType = grid[this.y][this.x];
+
+            if (tileType === TILE_TYPE.EMPTY) return;
+            
+            if (tileType === TILE_TYPE.STINK_CHEESE) {
+                stinkCheeseCount++;
+                score += 10;
+            } else if (tileType === TILE_TYPE.BIG_CHEESE) {
+                score += 30;
+                playSound("woohoo-mouse");
+            } else if (tileType === TILE_TYPE.CHEESE) {
+                score += 10;
+                cheeseCount--;
+            }
+
+            grid[this.y][this.x] = TILE_TYPE.EMPTY;
+            updateUI();
+            if (cheeseCount === 0) levelComplete();
+        }
+    }
+
+    class Cat {
+        constructor() {
+            this.px = 0; this.py = 0;
+            this.vx = 0; this.vy = 0;
+            this.trail = [];
+            this.respawn();
+        }
+
+        draw() {
+            // Draw trail first (so it appears behind the cat)
+            this.trail.forEach((pos, index) => {
+                const alpha = (index + 1) / this.trail.length;
+                ctx.globalAlpha = alpha * 0.7;
+            });
+            ctx.globalAlpha = 1; // Reset alpha
+            drawCat(this.px, this.py); 
+        }
+
+        respawn() {
+            let speed;
+            const numCatsOnScreen = Math.min(level + 1, currentGridSize.maxCats);
+
+            if (numCatsOnScreen < currentGridSize.maxCats) {
+                speed = 1.2;
+            } else {
+                const levelWhenMaxCatsReached = currentGridSize.maxCats - 1;
+                const levelsPastMax = level - levelWhenMaxCatsReached;
+                speed = 1.2 + (levelsPastMax * 0.2);
+            }
+            
+            const isDiagonal = level > 2 && Math.random() < 0.2;
+
+            if (isDiagonal) {
+                const edge = Math.floor(Math.random() * 4);
+                const diagonalSpeed = speed * 0.707;
+                let xSpawnTile = Math.floor(Math.random() * (gridWidth + 2)) - 1;
+                let ySpawnTile = Math.floor(Math.random() * (gridHeight + 2)) - 1;
+                switch(edge) {
+                    case 0: {
+                        this.px = xSpawnTile * tileSize; 
+                        this.py = -tileSize; 
+                        this.vx = Math.random() > 0.5 ? diagonalSpeed : -diagonalSpeed; 
+                        this.vy = diagonalSpeed; 
+                        break;
+                    }
+                    case 1: {
+                        this.px = canvas.width; 
+                        this.py = ySpawnTile * tileSize; 
+                        this.vx = -diagonalSpeed; 
+                        this.vy = Math.random() > 0.5 ? diagonalSpeed : -diagonalSpeed; 
+                        break;
+                    }
+                    case 2: {
+                        this.px = xSpawnTile * tileSize; 
+                        this.py = canvas.height; 
+                        this.vx = Math.random() > 0.5 ? diagonalSpeed : -diagonalSpeed; 
+                        this.vy = -diagonalSpeed; 
+                        break;
+                    }
+                    case 3: {
+                        this.px = -tileSize + .2; 
+                        this.py = ySpawnTile * tileSize; 
+                        this.vx = diagonalSpeed; 
+                        this.vy = Math.random() > 0.5 ? diagonalSpeed : -diagonalSpeed; 
+                        break;
+                    }
+                }
+            } else {
+                const edge = Math.floor(Math.random() * 4);
+                switch (edge) {
+                    case 0: {
+                        this.px = Math.floor(Math.random() * gridWidth) * tileSize; 
+                        this.py = -tileSize; 
+                        this.vx = 0; 
+                        this.vy = speed; 
+                        break;
+                    }
+                    case 1: {
+                        this.px = canvas.width; 
+                        this.py = Math.floor(Math.random() * gridHeight) * tileSize; 
+                        this.vx = -speed; 
+                        this.vy = 0; 
+                        break;
+                    }
+                    case 2: {
+                        this.px = Math.floor(Math.random() * gridWidth) * tileSize; 
+                        this.py = canvas.height; 
+                        this.vx = 0; 
+                        this.vy = -speed; 
+                        break;
+                    }
+                    case 3: {
+                        this.px = -tileSize; 
+                        this.py = Math.floor(Math.random() * gridHeight) * tileSize; 
+                        this.vx = speed; 
+                        this.vy = 0; 
+                        break;
+                    }
+                }
+            }
+        }
+        
+        update() {
+            this.trail.push({ x: this.px, y: this.py });
+            if (this.trail.length > 8) { // Keep last 8 positions
+                this.trail.shift();
+            }
+            this.px += this.vx;
+            this.py += this.vy;
+            if (this.px < -tileSize || this.px > canvas.width || this.py < -tileSize || this.py > canvas.height) {
+                this.respawn();
+            }
+        }
+    }
+
+    // --- Game Setup ---
+    function init() {
+        document.getElementById('cheese-icon-ui').src = cheeseImage.src;
+        document.getElementById('stink-cheese-icon-ui').src = stinkCheeseImage.src;
+        document.getElementById('mouse-icon-ui').src = mouseImage.src;
+
+        updateUI();
+        document.getElementById('start-small').onclick = () => startGame(GRID_SIZES.small);
+        document.getElementById('start-medium').onclick = () => startGame(GRID_SIZES.medium);
+        document.getElementById('start-large').onclick = () => startGame(GRID_SIZES.large);
+        homeButton.onclick = goHome;
+        goHome();
+    }
+
+    async function startGame(size) {
+        if (!audioReady) {
+            await Tone.start();
+            audioReady = true;
+        }
+        currentGridSize = size;
+        gridWidth = size.w;
+        gridHeight = size.h;
+        level = 1; score = 0; lives = LIVES_PER_GAME; isGameOver = false;
+        stinkCheeseCount = 0;
+        startScreen.style.display = 'none';
+        messageScreen.style.display = 'none';
+        gameContainer.style.aspectRatio = 'auto';
+        setupLevel();
+    }
+    
+    function resizeCanvas() {
+        const container = document.getElementById('game-container');
+        if (!container || !gridWidth) return;
+        canvas.width = container.clientWidth; // 664
+        tileSize = canvas.width / gridWidth;
+        console.log('tileSize: ' + tileSize);
+        canvas.height = tileSize * gridHeight;
+    }
+
+    function setupLevel() {
+        hasMoved = false;
+        resizeCanvas(); 
+        grid = Array(gridHeight).fill(null).map(() => Array(gridWidth).fill(TILE_TYPE.CHEESE));
+        
+        const centerX = Math.floor(gridWidth / 2);
+        const centerY = Math.floor(gridHeight / 2);
+        
+        player = new Player(centerX, centerY);
+        grid[centerY][centerX] = TILE_TYPE.EMPTY;
+
+        const cheeseCoords = [];
+        for (let y = 0; y < gridHeight; y++) {
+            for (let x = 0; x < gridWidth; x++) {
+                if (grid[y][x] === TILE_TYPE.CHEESE) {
+                    cheeseCoords.push({x, y});
+                }
+            }
+        }
+
+        if (level > 1 && level % 2 !== 0 && cheeseCoords.length > 0) {
+            const randIndex = Math.floor(Math.random() * cheeseCoords.length);
+            const stinkCoord = cheeseCoords.splice(randIndex, 1)[0];
+            grid[stinkCoord.y][stinkCoord.x] = TILE_TYPE.STINK_CHEESE;
+        }
+        
+        if (level > 1 && cheeseCoords.length > 0) {
+            const numBigCheeses = Math.min(Math.floor(level / 2), currentGridSize.maxBigCheeses, cheeseCoords.length);
+            for (let i = 0; i < numBigCheeses; i++) {
+                 const randIndex = Math.floor(Math.random() * cheeseCoords.length);
+                 const bigCoord = cheeseCoords.splice(randIndex, 1)[0];
+                 grid[bigCoord.y][bigCoord.x] = TILE_TYPE.BIG_CHEESE;
+            }
+        }
+        
+        cheeseCount = cheeseCoords.length;
+
+        cats = [];
+        const numCats = Math.min(level + 1, currentGridSize.maxCats);
+        for(let i = 0; i < numCats; i++) {
+            cats.push(new Cat());
+        }
+
+        updateUI();
+        cancelAnimationFrame(gameLoopId);
+        gameLoopId = requestAnimationFrame(gameLoop);
+    }
+
+    // --- Game Loop and Drawing ---
+    function gameLoop() {
+        if (isGameOver) {
+            cancelAnimationFrame(gameLoopId);
+            return;
+        }
+        update();
+        draw();
+        gameLoopId = requestAnimationFrame(gameLoop);
+    }
+
+    function update() {
+        if (hasMoved) {
+            cats.forEach(cat => cat.update());
+        }
+        checkPlayerCatCollision();
+        checkCatCatCollision();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        drawGrid();
+
+        for (let y = 0; y < gridHeight; y++) {
+            for (let x = 0; x < gridWidth; x++) {
+                if (grid[y][x] === TILE_TYPE.CHEESE) {
+                    drawCheese(x, y);
+                } else if (grid[y][x] === TILE_TYPE.STINK_CHEESE) {
+                    drawStinkCheese(x, y);
+                } else if (grid[y][x] === TILE_TYPE.BIG_CHEESE) {
+                    drawBigCheese(x, y);
+                }
+            }
+        }
+        player.draw();
+        if (hasMoved) {
+            cats.forEach(cat => cat.draw());
+        }
+    }
+
+    // --- Game Logic ---
+    function checkPlayerCatCollision() {
+        if (isGameOver) return;
+        
+        const hitboxInset = tileSize * 0.1; 
+
+        const playerLeft = player.x * tileSize + hitboxInset;
+        const playerRight = (player.x * tileSize + tileSize) - hitboxInset;
+        const playerTop = player.y * tileSize + hitboxInset;
+        const playerBottom = (player.y * tileSize + tileSize) - hitboxInset;
+
+        cats.forEach(cat => {
+            const catLeft = cat.px + hitboxInset;
+            const catRight = (cat.px + tileSize) - hitboxInset;
+            const catTop = cat.py + hitboxInset;
+            const catBottom = (cat.py + tileSize) - hitboxInset;
+
+            if (playerLeft < catRight && playerRight > catLeft &&
+                playerTop < catBottom && playerBottom > catTop) {
+                loseLife();
+            }
+        });
+    }
+
+    function checkCatCatCollision() {
+        for (let i = 0; i < cats.length; i++) {
+            for (let j = i + 1; j < cats.length; j++) {
+                const cat1 = cats[i];
+                const cat2 = cats[j];
+                const dx = (cat1.px + tileSize / 2) - (cat2.px + tileSize / 2);
+                const dy = (cat1.py + tileSize / 2) - (cat2.py + tileSize / 2);
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < tileSize) {
+                    cat1.vx *= -1; 
+                    cat1.vy *= -1;
+                    cat2.vx *= -1; 
+                    cat2.vy *= -1;
+                    cat1.px += cat1.vx; 
+                    cat1.py += cat1.vy;
+                    cat2.px += cat2.vx; 
+                    cat2.py += cat2.vy;
+                }
+            }
+        }
+    }
+
+    function loseLife() {
+        if (isGameOver) return;
+        isGameOver = true;
+        lives--;
+        updateUI();
+        if (lives <= 0) {
+            playSound("lost");
+            gameOver();
+        } else {
+            playSound("cat_caught_mouse");
+            setTimeout(() => {
+                resetPositions();
+                isGameOver = false;
+                gameLoopId = requestAnimationFrame(gameLoop);
+            }, 500);
+        }
+    }
+    
+    function resetPositions() {
+        const centerX = Math.floor(gridWidth / 2);
+        const centerY = Math.floor(gridHeight / 2);
+        player.x = centerX;
+        player.y = centerY;
+        cats.forEach(cat => cat.respawn());
+        draw();
+    }
+
+    function levelComplete() {
+        isGameOver = true;
+        score += 100; level++;
+        const now = Tone.now();
+        playSound("win");
+        showMessage("Level Complete!", `On to level ${level}`, "Next Level", () => {
+            messageScreen.style.display = 'none';
+            isGameOver = false;
+            setupLevel();
+        });
+    }
+
+    function gameOver() {
+        isGameOver = true;
+        const now = Tone.now();
+        if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('cheesyPursuitHighScore', highScore);
+        }
+        showMessage("Game Over", `Final Score: ${score}`, "Play Again", () => {
+            startGame(currentGridSize);
+        }, true);
+    }
+    
+    function goHome() {
+        isGameOver = true;
+        isPaused = false;
+        cancelAnimationFrame(gameLoopId);
+        messageScreen.style.display = 'none';
+        startScreen.style.display = 'flex';
+        gameContainer.style.aspectRatio = '1 / 1';
+        canvas.width = gameContainer.clientWidth;
+        canvas.height = gameContainer.clientHeight;
+        ctx.clearRect(0,0,canvas.width, canvas.height);
+        level = 1;
+        score = 0;
+        lives = LIVES_PER_GAME;
+        stinkCheeseCount = 0;
+        gridWidth = null;
+        gridHeight = null;
+        updateUI();
+    }
+
+    // --- UI and Event Handling ---
+    function updateUI() {
+        scoreEl.textContent = score || 0;
+        levelDisplayEl.textContent = level || 1;
+        livesEl.textContent = Math.max(0, lives);
+        stinkCheeseCountEl.textContent = stinkCheeseCount;
+        cheesesLeftCountEl.textContent = cheeseCount || 0;
+    }
+
+    function showMessage(title, text, buttonText, action, showHomeButton = false) {
+        messageTitle.textContent = title;
+        messageText.textContent = text;
+        nextActionButton.textContent = buttonText;
+        nextActionButton.onclick = action;
+        homeButton.style.display = showHomeButton ? 'block' : 'none';
+        messageScreen.style.display = 'flex';
+    }
+    
+    function togglePause() {
+        if (isGameOver) return;
+        isPaused = !isPaused;
+
+        if (isPaused) {
+            cancelAnimationFrame(gameLoopId);
+            showMessage("Game Paused", "Press SPACE or ESC to resume", "Resume", togglePause, true);
+        } else {
+            messageScreen.style.display = 'none';
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+    }
+
+    function handleKeyPress(e) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            if (isPaused) {
+                togglePause();
+            } else if (!isGameOver && getComputedStyle(startScreen).display === 'none') {
+                togglePause();
+            } else if (isGameOver && getComputedStyle(messageScreen).display !== 'none') {
+                goHome();
+            }
+            return;
+        }
+
+        if (e.key === ' ' || e.code === 'Space') {
+            e.preventDefault();
+            if (getComputedStyle(startScreen).display !== 'none') {
+                startGame(GRID_SIZES.medium);
+                return;
+            }
+            if (getComputedStyle(messageScreen).display !== 'none') {
+                nextActionButton.click();
+                return;
+            }
+            if (!isGameOver && !isPaused && stinkCheeseCount > 0) {
+                stinkCheeseCount--;
+                const now = Tone.now();
+                playSound("burp");
+                updateUI();
+                cats.forEach(cat => {
+                    cat.vx *= -1;
+                    cat.vy *= -1;
+                });
+            }
+        }
+
+        if (isGameOver || isPaused) return;
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            e.preventDefault();
+            switch (e.key) {
+                case 'ArrowUp': player.move(0, -1); break;
+                case 'ArrowDown': player.move(0, 1); break;
+                case 'ArrowLeft': player.move(-1, 0); break;
+                case 'ArrowRight': player.move(1, 0); break;
+            }
+            draw();
+        }
+    }
+    
+    function handleResize() {
+        if (isGameOver || !gridWidth) return;
+        resizeCanvas();
+        draw();
+    }
+
+    // --- Event Listeners ---
+    window.addEventListener('keydown', handleKeyPress);
+    window.addEventListener('resize', handleResize);
+
+    // --- Start the application ---
+    init();
+
+</script>
+</body>
+</html>
