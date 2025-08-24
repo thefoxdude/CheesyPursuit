@@ -642,7 +642,7 @@
         isGameOver = true;
         score += 100; level++;
         const now = Tone.now();
-        playSound("win");
+        playSound("og_win");
         showMessage("Level Complete!", `On to level ${level}`, "Next Level", () => {
             messageScreen.style.display = 'none';
             isGameOver = false;
